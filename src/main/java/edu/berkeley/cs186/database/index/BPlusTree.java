@@ -146,8 +146,10 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
-
-        return Optional.empty();
+        LeafNode node = root.get(key);
+        // getKey : Return the record id associated with `key`
+        return node.getKey(key);
+        // return Optional.empty();
     }
 
     /**
