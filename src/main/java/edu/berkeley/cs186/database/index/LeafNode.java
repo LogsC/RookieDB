@@ -393,12 +393,10 @@ class LeafNode extends BPlusNode {
         }
 
         List<DataBox> keys = new ArrayList<>();
-        List<Long> rids = new ArrayList<>();
+        List<RecordId> rids = new ArrayList<>();
         int n = buf.getInt();
         for (int i = 0; i < n; ++i) {
             keys.add(DataBox.fromBytes(buf, metadata.getKeySchema()));
-        }
-        for (int i = 0; i < n + 1; ++i) {
             rids.add(RecordId.fromBytes(buf));
         }
 
