@@ -146,6 +146,7 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): implement
+        // starts recursive call
         LeafNode node = root.get(key);
         // getKey : Return the record id associated with `key`
         return node.getKey(key);
