@@ -121,7 +121,9 @@ class InnerNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-
+        int leafNum = numLessThanEqual(key, getKeys());
+        BPlusNode child = getChild(leafNum);
+        child.remove(key);
         return;
     }
 

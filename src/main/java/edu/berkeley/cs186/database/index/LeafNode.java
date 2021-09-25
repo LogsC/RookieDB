@@ -214,7 +214,16 @@ class LeafNode extends BPlusNode {
     @Override
     public void remove(DataBox key) {
         // TODO(proj2): implement
-
+        // find the location of the key
+        // check if the key is there
+        // if yes remove the key and rid
+        // then shift the keys down one
+        if (keys.contains(key)) {
+            int loc = InnerNode.numLessThan(key, keys);
+            keys.remove(loc);
+            rids.remove(loc);
+            sync();
+        }
         return;
     }
 
