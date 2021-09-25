@@ -467,25 +467,27 @@ public class BPlusTree {
         @Override
         public boolean hasNext() {
             // TODO(proj2): implement
-            if (this.riter.hasNext()) {
+            if (this.riter.hasNext() || this.leaf.getRightSibling().isPresent()) {
                 return true;
             }
-            else if (this.leaf.getRightSibling().isPresent()) {
+            /**
+            else if () {
                 this.riter = leaf.scanAll();
                 if (this.riter.hasNext()) {
                     return true;
                 }
             }
+             */
             return false;
         }
 
         @Override
         public RecordId next() {
             // TODO(proj2): implement
-            if (hasNext()) {
+            if (this.riter.hasNext()) {
                 return riter.next();
             } else if (this.leaf.getRightSibling().isPresent()) {
-                this.leaf = leaf.getRightSibling().get();
+                this.leaf = this.leaf.getRightSibling().get();
                 this.riter = leaf.scanAll();
                 if (this.riter.hasNext()) {
                     return riter.next();
