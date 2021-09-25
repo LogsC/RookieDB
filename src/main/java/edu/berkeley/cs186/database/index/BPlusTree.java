@@ -11,6 +11,7 @@ import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.table.RecordId;
 
+import javax.xml.crypto.Data;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -261,24 +262,19 @@ public class BPlusTree {
         // TODO(proj2): implement
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
-        // the tree's root if the old root splits.
-        try {
-            Optional<Pair<DataBox, Long>> split = root.put(key, rid);
-            // if split, handle case
-            if(split.isPresent()) {
-                DataBox split_key = split.get().getFirst();
-                Long right_node_page_num = split.get().getSecond();
-                List<DataBox> keys = new ArrayList<>();
-                List<Long> children = new ArrayList<>();
-                keys.add(split_key);
-                children.add(root.getPage().getPageNum());
-                children.add(right_node_page_num);
-                this.updateRoot(new InnerNode(metadata, bufferManager, keys, children, lockContext));
-            }
-        } catch(Exception e) {
-            throw e;
+        // the tree's root if the old root splits
+        Optional<Pair<DataBox, Long>> split = root.put(key, rid);
+        // if split, handle case
+        if(split.isPresent()) {
+            DataBox split_key = split.get().getFirst();
+            Long right_node_page_num = split.get().getSecond();
+            List<DataBox> keys = new ArrayList<>();
+            List<Long> children = new ArrayList<>();
+            keys.add(split_key);
+            children.add(root.getPage().getPageNum());
+            children.add(right_node_page_num);
+            this.updateRoot(new InnerNode(this.metadata, this.bufferManager, keys, children, this.lockContext));
         }
-        return;
     }
 
     /**
@@ -306,6 +302,21 @@ public class BPlusTree {
         // Note: You should NOT update the root variable directly.
         // Use the provided updateRoot() helper method to change
         // the tree's root if the old root splits.
+        if (this.scanAll().hasNext()) {
+            throw new BPlusTreeException("tree must be empty!");
+        } else {
+            while(data.hasNext()) {
+                Optional<Pair<DataBox, Long>> curr = root.bulkLoad(data, fillFactor);
+                if (curr.isPresent()) {
+                    List<DataBox> root_keys = new ArrayList<>();
+                    List<Long> root_children = new ArrayList<>();
+                    root_keys.add(curr.get().getFirst());
+                    root_children.add(root.getPage().getPageNum());
+                    root_children.add(curr.get().getSecond());
+                    this.updateRoot(new InnerNode(this.metadata, this.bufferManager, root_keys, root_children, this.lockContext));
+                }
+            }
+        }
 
         return;
     }
@@ -474,6 +485,7 @@ public class BPlusTree {
             if (hasNext()) {
                 return riter.next();
             } else if (this.leaf.getRightSibling().isPresent()) {
+                this.leaf = leaf.getRightSibling().get();
                 this.riter = leaf.scanAll();
                 if (this.riter.hasNext()) {
                     return riter.next();

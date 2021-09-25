@@ -105,21 +105,19 @@ class InnerNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
-        int curr_loc = numLessThan(key, keys);
+        int curr_loc = numLessThanEqual(key, keys);
         BPlusNode child_node = this.getChild(curr_loc);
         Optional<Pair<DataBox, Long>> node_here = child_node.put(key, rid);
         if (node_here.isPresent()) {
             int d = this.metadata.getOrder();
-            int new_loc = numLessThan(node_here.get().getFirst(), keys);
+            int new_loc = numLessThanEqual(node_here.get().getFirst(), keys);
+            keys.add(new_loc, node_here.get().getFirst());
+            children.add(new_loc + 1, node_here.get().getSecond());
             // check split
-            if (keys.size() < 2 * d) {
-                keys.add(new_loc, node_here.get().getFirst());
-                children.add(new_loc + 1, node_here.get().getSecond());
+            if (keys.size() <= 2 * d) {
                 sync();
                 return Optional.empty();
             } else {
-                keys.add(new_loc, node_here.get().getFirst());
-                children.add(new_loc + 1, node_here.get().getSecond());
                 // new keys / children
                 List<DataBox> new_keys = keys.subList(d + 1, keys.size());
                 List<Long> new_children = children.subList(d + 1, children.size());
@@ -127,7 +125,7 @@ class InnerNode extends BPlusNode {
                 // update old keys / children
                 keys = keys.subList(0, d);
                 children = children.subList(0, d + 1);
-                InnerNode newNode = new InnerNode(metadata, bufferManager, new_keys, new_children, treeContext);
+                InnerNode newNode = new InnerNode(this.metadata, this.bufferManager, new_keys, new_children, this.treeContext);
                 sync();
                 return Optional.of(new Pair(split_key, newNode.getPage().getPageNum()));
             }
@@ -144,7 +142,31 @@ class InnerNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
-
+        while(data.hasNext()) {
+            BPlusNode child = this.getChild(children.size() - 1);
+            Optional<Pair<DataBox, Long>> curr = child.bulkLoad(data, fillFactor);
+            if (curr.isPresent()) {
+                keys.add(curr.get().getFirst());
+                children.add(curr.get().getSecond());
+                int d = this.metadata.getOrder();
+                if (keys.size() <= 2 * d) {
+                    sync();
+                } else {
+                    List<DataBox> new_keys = keys.subList(d + 1, keys.size());
+                    List<Long> new_children = children.subList(d + 1, children.size());
+                    DataBox split_key = keys.get(d);
+                    // update old keys / children
+                    keys = keys.subList(0, d);
+                    children = children.subList(0, d + 1);
+                    InnerNode newNode = new InnerNode(this.metadata, this.bufferManager, new_keys, new_children, this.treeContext);
+                    sync();
+                    return Optional.of(new Pair(split_key, newNode.getPage().getPageNum()));
+                }
+            } else {
+                sync();
+                return Optional.empty();
+            }
+        }
         return Optional.empty();
     }
 

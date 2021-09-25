@@ -7,6 +7,7 @@ import edu.berkeley.cs186.database.databox.DataBox;
 import edu.berkeley.cs186.database.databox.Type;
 import edu.berkeley.cs186.database.memory.BufferManager;
 import edu.berkeley.cs186.database.memory.Page;
+import edu.berkeley.cs186.database.table.Record;
 import edu.berkeley.cs186.database.table.RecordId;
 
 import java.nio.ByteBuffer;
@@ -164,7 +165,7 @@ class LeafNode extends BPlusNode {
         if (keys.contains(key)) {
             throw new BPlusTreeException("no duplicate keys allowed");
         }
-        int curr_loc = InnerNode.numLessThan(key, keys);
+        int curr_loc = InnerNode.numLessThanEqual(key, keys);
         /**
         int curr_loc = 0;
         boolean hit = false;
@@ -178,14 +179,12 @@ class LeafNode extends BPlusNode {
         if ()
           */
         int d = this.metadata.getOrder();
-        if (keys.size() < 2 * d) {
-            keys.add(curr_loc, key);
-            rids.add(curr_loc, rid);
+        keys.add(curr_loc, key);
+        rids.add(curr_loc, rid);
+        if (keys.size() <= 2 * d) {
             sync();
             return Optional.empty();
         } else {
-            keys.add(curr_loc, key);
-            rids.add(curr_loc, rid);
             // extract new leaf data
             List<DataBox> new_keys = keys.subList(d, keys.size());
             List<RecordId> new_rids = rids.subList(d, rids.size());
@@ -194,6 +193,7 @@ class LeafNode extends BPlusNode {
             rids = rids.subList(0, d);
             // make new leaf
             LeafNode newLeaf = new LeafNode(metadata, bufferManager, new_keys, new_rids, this.rightSibling, treeContext);
+            newLeaf.sync();
             this.rightSibling = Optional.of(newLeaf.getPage().getPageNum());
             sync();
             return Optional.of(new Pair(new_keys.get(0), this.rightSibling.get()));
@@ -206,6 +206,26 @@ class LeafNode extends BPlusNode {
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
         // TODO(proj2): implement
+        int d = this.metadata.getOrder();
+        int max = (int) Math.ceil(2 * d * fillFactor);
+        while(data.hasNext()) {
+            DataBox next_key = data.next().getFirst();
+            RecordId next_rid = data.next().getSecond();
+            if (keys.size() < max) {
+                keys.add(next_key);
+                rids.add(next_rid);
+                sync();
+            } else {
+                List<DataBox> new_keys = new ArrayList<>();
+                List<RecordId> new_rids = new ArrayList<>();
+                new_keys.add(next_key);
+                new_rids.add(next_rid);
+                LeafNode newLeaf = new LeafNode(this.metadata, this.bufferManager, new_keys, new_rids, this.rightSibling, this.treeContext);
+                this.rightSibling = Optional.of(newLeaf.getPage().getPageNum());
+                sync();
+                return Optional.of(new Pair(new_keys.get(0), newLeaf.getPage().getPageNum()));
+            }
+        }
 
         return Optional.empty();
     }
