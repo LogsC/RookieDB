@@ -208,9 +208,10 @@ class LeafNode extends BPlusNode {
         int d = this.metadata.getOrder();
         int max = (int) Math.ceil(2 * d * fillFactor);
         while(data.hasNext()) {
-            DataBox next_key = data.next().getFirst();
-            RecordId next_rid = data.next().getSecond();
-            if (keys.size() <= max) {
+            Pair<DataBox, RecordId> next_data = data.next();
+            DataBox next_key = next_data.getFirst();
+            RecordId next_rid = next_data.getSecond();
+            if (keys.size() < max) {
                 keys.add(next_key);
                 rids.add(next_rid);
                 sync();
