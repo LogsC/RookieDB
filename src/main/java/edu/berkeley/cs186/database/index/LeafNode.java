@@ -161,8 +161,44 @@ class LeafNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> put(DataBox key, RecordId rid) {
         // TODO(proj2): implement
-
-        return Optional.empty();
+        if (keys.contains(key)) {
+            throw new BPlusTreeException("no duplicate keys allowed");
+        }
+        int curr_loc = InnerNode.numLessThan(key, keys);
+        /**
+        int curr_loc = 0;
+        boolean hit = false;
+        for (int i = 0; i < keys.size(); i++) {
+            if (keys.get(i).getInt() > key.getInt()) {
+                curr_loc = i;
+                hit = true;
+                break;
+            }
+        }
+        if ()
+          */
+        int d = this.metadata.getOrder();
+        if (keys.size() < 2 * d) {
+            keys.add(curr_loc, key);
+            rids.add(curr_loc, rid);
+            sync();
+            return Optional.empty();
+        } else {
+            keys.add(curr_loc, key);
+            rids.add(curr_loc, rid);
+            // extract new leaf data
+            List<DataBox> new_keys = keys.subList(d, keys.size());
+            List<RecordId> new_rids = rids.subList(d, rids.size());
+            // update old leaf data
+            keys = keys.subList(0, d);
+            rids = rids.subList(0, d);
+            // make new leaf
+            LeafNode newLeaf = new LeafNode(metadata, bufferManager, new_keys, new_rids, this.rightSibling, treeContext);
+            this.rightSibling = Optional.of(newLeaf.getPage().getPageNum());
+            sync();
+            return Optional.of(new Pair(new_keys.get(0), this.rightSibling.get()));
+        }
+        // return Optional.empty();
     }
 
     // See BPlusNode.bulkLoad.
