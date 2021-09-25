@@ -205,8 +205,9 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): Return a BPlusTreeIterator.
-
-        return Collections.emptyIterator();
+        LeafNode leaf = root.getLeftmostLeaf();
+        return new BPlusTreeIterator(leaf);
+        // return Collections.emptyIterator();
     }
 
     /**
@@ -238,8 +239,9 @@ public class BPlusTree {
         LockUtil.ensureSufficientLockHeld(lockContext, LockType.NL);
 
         // TODO(proj2): Return a BPlusTreeIterator.
-
-        return Collections.emptyIterator();
+        LeafNode leaf = root.get(key);
+        return new BPlusTreeIterator(leaf, key);
+        // return Collections.emptyIterator();
     }
 
     /**
@@ -438,18 +440,45 @@ public class BPlusTree {
     // Iterator ////////////////////////////////////////////////////////////////
     private class BPlusTreeIterator implements Iterator<RecordId> {
         // TODO(proj2): Add whatever fields and constructors you want here.
+        private LeafNode leaf;
+        private Iterator<RecordId> riter;
+
+        public BPlusTreeIterator(LeafNode leaf, DataBox key) {
+            this.leaf = leaf;
+            this.riter = leaf.scanGreaterEqual(key);
+        }
+
+        public BPlusTreeIterator(LeafNode leaf) {
+            this.leaf = leaf;
+            this.riter = leaf.scanAll();
+        }
 
         @Override
         public boolean hasNext() {
             // TODO(proj2): implement
-
+            if (this.riter.hasNext()) {
+                return true;
+            }
+            else if (this.leaf.getRightSibling().isPresent()) {
+                this.riter = leaf.scanAll();
+                if (this.riter.hasNext()) {
+                    return true;
+                }
+            }
             return false;
         }
 
         @Override
         public RecordId next() {
             // TODO(proj2): implement
-
+            if (hasNext()) {
+                return riter.next();
+            } else if (this.leaf.getRightSibling().isPresent()) {
+                this.riter = leaf.scanAll();
+                if (this.riter.hasNext()) {
+                    return riter.next();
+                }
+            }
             throw new NoSuchElementException();
         }
     }
