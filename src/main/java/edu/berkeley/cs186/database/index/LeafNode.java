@@ -218,13 +218,13 @@ class LeafNode extends BPlusNode {
         // check if the key is there
         // if yes remove the key and rid
         // then shift the keys down one
-        if (keys.contains(key)) {
-            int loc = InnerNode.numLessThan(key, keys);
-            keys.remove(loc);
-            rids.remove(loc);
-            sync();
+        int loc = keys.indexOf(key);
+        if (loc == -1) {
+            return;
         }
-        return;
+        keys.remove(loc);
+        rids.remove(loc);
+        sync();
     }
 
     // Iterators ///////////////////////////////////////////////////////////////
