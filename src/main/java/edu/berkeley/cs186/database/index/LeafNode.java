@@ -193,7 +193,6 @@ class LeafNode extends BPlusNode {
             rids = rids.subList(0, d);
             // make new leaf
             LeafNode newLeaf = new LeafNode(metadata, bufferManager, new_keys, new_rids, this.rightSibling, treeContext);
-            newLeaf.sync();
             this.rightSibling = Optional.of(newLeaf.getPage().getPageNum());
             sync();
             return Optional.of(new Pair(new_keys.get(0), this.rightSibling.get()));
@@ -211,7 +210,7 @@ class LeafNode extends BPlusNode {
         while(data.hasNext()) {
             DataBox next_key = data.next().getFirst();
             RecordId next_rid = data.next().getSecond();
-            if (keys.size() < max) {
+            if (keys.size() <= max) {
                 keys.add(next_key);
                 rids.add(next_rid);
                 sync();
