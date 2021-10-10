@@ -144,6 +144,7 @@ public class BNLJOperator extends JoinOperator {
                 if (this.rightPageIterator.hasNext()) {
                     // if the right page iterator has a value to yield:
                     // Join if match
+                    // ?????? (possibly incorrect - taken from SNLJ)
                     Record rightRecord = rightPageIterator.next();
                     if (compare(leftRecord, rightRecord) == 0) {
                         return leftRecord.concat(rightRecord);
@@ -159,11 +160,20 @@ public class BNLJOperator extends JoinOperator {
                     // to yield, but there's more right pages:
                     // fetch next right page
                     fetchNextRightPage();
+                    this.leftBlockIterator.reset();
+                    leftRecord = leftBlockIterator.next();
                 } else if (leftSourceIterator.hasNext()) {
                     // if neither right page nor left block iterators have values
                     // nor are there more right pages, but there are still left blocks
+                    // move rightPageIterator to next page (?)
+                    this.rightPageIterator = QueryOperator.getBlockIterator(
+                            getRightSource().backtrackingIterator(), getRightSource().getSchema(), 1);
                     // fetch next left block
                     fetchNextLeftBlock();
+                    // fetch next right page
+                    this.rightPageIterator.reset();
+                    fetchNextRightPage();
+                    this.rightPageIterator.markPrev();
                 } else {
                     // if you're here then there are no more records to fetch
                     return null;
