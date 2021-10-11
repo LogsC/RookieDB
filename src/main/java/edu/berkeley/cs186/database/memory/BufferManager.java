@@ -617,7 +617,6 @@ public class BufferManager implements AutoCloseable {
     public static boolean logIOs;
     private void incrementIOs() {
         if (logIOs) {
-            System.out.println("IO incurred");
             StackTraceElement[] trace = Thread.currentThread().getStackTrace();
             for (int i = 0; i < trace.length; i++) {
                 String s = trace[i].toString();
