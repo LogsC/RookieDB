@@ -155,12 +155,14 @@ public class BNLJOperator extends JoinOperator {
                     // Advance left and reset right
                     this.leftRecord = leftBlockIterator.next();
                     this.rightPageIterator.reset();
+                    // this.rightPageIterator.markNext();
                 } else if (this.rightSourceIterator.hasNext()) {
                     // if neither the right page nor left block iterators have values
                     // to yield, but there's more right pages:
                     // fetch next right page
                     fetchNextRightPage();
                     this.leftBlockIterator.reset();
+                    // this.leftBlockIterator.markNext();
                     leftRecord = leftBlockIterator.next();
                 } else if (this.leftSourceIterator.hasNext()) {
                     // if neither right page nor left block iterators have values
@@ -169,6 +171,7 @@ public class BNLJOperator extends JoinOperator {
                     // fetch next left block
                     fetchNextLeftBlock();
                     this.rightSourceIterator.reset();
+                    // this.rightSourceIterator.markNext();
                     fetchNextRightPage();
                     // fetch next right page, start from the beginning
                 } else {
