@@ -93,8 +93,8 @@ public class SortOperator extends QueryOperator {
         while (records.hasNext()) {
             recordList.add(records.next());
         }
-        recordList.sort(comparator);
-        
+        recordList.sort(this.comparator);
+
         sortedRun.addAll(recordList);
         return sortedRun;
     }
@@ -117,7 +117,43 @@ public class SortOperator extends QueryOperator {
     public Run mergeSortedRuns(List<Run> runs) {
         assert (runs.size() <= this.numBuffers - 1);
         // TODO(proj3_part1): implement
-        return null;
+        // run to return
+        Run mergedRun = new Run(this.transaction, getSchema());
+        // priority queue to determine order of adding records
+        RecordPairComparator comp = new RecordPairComparator();
+        PriorityQueue<Pair<Record, Integer>> queue = new PriorityQueue<Pair<Record, Integer>>(runs.size(), comp);
+        // list of iterators for each run in order
+        List<Iterator<Record>> recIter = new ArrayList<>();
+
+        // adding a placeholder
+        // queue.add(new Pair<>(new Record(), 0));
+
+        for (int i = 0; i < runs.size(); i++) {
+            // creating iterators for each run
+            Iterator<Record> iter = runs.get(i).iterator();
+            recIter.add(iter);
+
+            // grab the current smallest record in each run in order if there exists one
+            if (iter.hasNext()) {
+                queue.add(new Pair<>(iter.next(), i));
+            }
+        }
+        // add records in order of the priority queue until there are no more records in the queue to add
+        // after adding a record to the new merged run, add that run's next smallest to the queue
+        while (!queue.isEmpty()) {
+            // add the next record to new merged run
+            Pair<Record, Integer> p = queue.remove();
+            int i = p.getSecond();
+            mergedRun.add(p.getFirst());
+
+            // check if the run that this record is from has more records
+            // if yes add record to queue
+            Iterator<Record> iter = recIter.get(i);
+            if (iter.hasNext()) {
+                queue.add(new Pair<>(iter.next(), i));
+            }
+        }
+        return mergedRun;
     }
 
     /**
