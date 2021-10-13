@@ -577,6 +577,28 @@ public class QueryPlan {
         QueryOperator minOp = new SequentialScanOperator(this.transaction, table);
 
         // TODO(proj3_part2): implement
+        // calculate the estimated I/O cost of a sequential scan
+        int minCost = minOp.estimateIOCost();
+        // list of valid indexes for given table
+        List<Integer> validIndexes = getEligibleIndexColumns(table);
+        // variable for keeping track of min cost operation index, initialize as invalid value
+        int minIndex = -1;
+        // for any indices on any column of the table that we have a selection predicate on,
+        // calculate the estimated I/O cost of doing an index scan on that column
+        for (int i : validIndexes) {
+            SelectPredicate selection = selectPredicates.get(i);
+            QueryOperator iScan = new IndexScanOperator(transaction, table, selection.column,
+                    selection.operator, selection.value);
+            // determine cost of index scan, compare with minCost, and update accordingly
+            int cost = iScan.estimateIOCost();
+            if (cost < minCost) {
+                minOp = iScan;
+                minCost = cost;
+                minIndex = i;
+            }
+        }
+        // push down any selection predicates that involve solely the table
+        minOp = addEligibleSelections(minOp, minIndex);
         return minOp;
     }
 
