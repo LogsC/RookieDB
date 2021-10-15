@@ -709,15 +709,36 @@ public class QueryPlan {
         // Pass 1: For each table, find the lowest cost QueryOperator to access
         // the table. Construct a mapping of each table name to its lowest cost
         // operator.
+        // create a map to store all tables in pass 1
+        Map<Set<String>, QueryOperator> pass1Map = new HashMap<>();
+        // for each table, find the lowest cost QueryOperator to access the table
+        // and construct a mapping of each table name to its lowest cost operator
+        for (String tableName: this.tableNames) {
+            // optimize by specifying table size (stores only one item) ?
+            Set<String> table = new HashSet<>();
+            table.add(tableName);
+            QueryOperator minOp = minCostSingleAccess(tableName);
+            pass1Map.put(table, minOp);
+        }
         //
         // Pass i: On each pass, use the results from the previous pass to find
         // the lowest cost joins with each table from pass 1. Repeat until all
         // tables have been joined.
+        // create a map to store previous pass, initialize to pass 1 map
+        Map<Set<String>, QueryOperator> prevMap = pass1Map;
+        // for each pass i, use the results from the previous pass to find
+        // the lowest cost joins with each table from pass 1.
+        for (int i = 1; i < tableNames.size(); i++) {
+            prevMap = minCostJoins(prevMap, pass1Map);
+        }
         //
         // Set the final operator to the lowest cost operator from the last
         // pass, add group by, project, sort and limit operators, and return an
         // iterator over the final operator.
-        return this.executeNaive(); // TODO(proj3_part2): Replace this!
+        this.finalOperator = minCostOperator(prevMap);
+        this.addGroupBy();
+        this.addProject();
+        return this.finalOperator.iterator(); // TODO(proj3_part2): Replace this!
     }
 
     // EXECUTE NAIVE ///////////////////////////////////////////////////////////
