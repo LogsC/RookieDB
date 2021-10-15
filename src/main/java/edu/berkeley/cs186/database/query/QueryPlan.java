@@ -689,12 +689,12 @@ public class QueryPlan {
                 if (set.contains(leftTable) && !set.contains(rightTable)) {
                     // case 1
                     rightOp = pass1Map.get(Collections.singleton(rightTable));
-                    leftOp = prevMap.get(Collections.singleton(leftTable));
+                    leftOp = prevMap.get(set);
                     newTable = rightTable;
                 } else if (set.contains(rightTable) && !set.contains(leftTable)) {
                     // case 2
                     leftOp = pass1Map.get(Collections.singleton(leftTable));
-                    rightOp = prevMap.get(Collections.singleton(rightTable));
+                    rightOp = prevMap.get(set);
                     newTable = leftTable;
                 } else {
                     // case 3
@@ -703,7 +703,9 @@ public class QueryPlan {
                 }
                 // cheapest join with the new table
                 minOp = minCostJoinType(leftOp, rightOp, leftColumn, rightColumn);
-                result.put(Collections.singleton(newTable), minOp);
+                Set<String> newTables = new HashSet<>(set);
+                newTables.add(newTable);
+                result.put(newTables, minOp);
             }
         }
 
@@ -755,8 +757,10 @@ public class QueryPlan {
         // and construct a mapping of each table name to its lowest cost operator
         for (String tableName: this.tableNames) {
             // optimize by specifying table size (stores only one item) ?
+            Set<String> table = new HashSet<>();
+            table.add(tableName);
             QueryOperator minOp = minCostSingleAccess(tableName);
-            pass1Map.put(Collections.singleton(tableName), minOp);
+            pass1Map.put(table, minOp);
         }
         //
         // Pass i: On each pass, use the results from the previous pass to find
