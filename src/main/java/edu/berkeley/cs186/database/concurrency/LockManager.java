@@ -161,7 +161,37 @@ public class LockManager {
         // move the synchronized block elsewhere if you wish.
         boolean shouldBlock = false;
         synchronized (this) {
-            
+            if (getLockType(transaction, name) == lockType) {
+                throw new DuplicateLockRequestException("Error: Duplicate Lock!");
+            }
+            ResourceEntry rEntry = getResourceEntry(name);
+            Long tNum = transaction.getTransNum();
+            for (ResourceName rName : releaseNames) {
+                if (getLockType(transaction, rName) == LockType.NL) {
+                    throw new NoLockHeldException("Error: No Lock!");
+                }
+            }
+            Lock aLock = new Lock(name, lockType, tNum);
+            // check for compatibility excluding current transaction
+            shouldBlock = !rEntry.checkCompatible(lockType, tNum);
+            if (!shouldBlock) {
+                // release lock
+                for (ResourceName rName : releaseNames) {
+                    List<Lock> tLocks = transactionLocks.get(tNum);
+                    for (Lock lock : tLocks) {
+                        if (lock.name.equals(rName)) {
+                            getResourceEntry(rName).releaseLock(lock);
+                        }
+                    }
+                }
+                // grant lock
+                rEntry.grantOrUpdateLock(aLock);
+            } else {
+                // should block => add to queue
+                LockRequest lReq = new LockRequest(transaction, aLock);
+                rEntry.waitingQueue.addLast(lReq);
+                // transaction.prepareBlock(); ?
+            }
         }
         if (shouldBlock) {
             transaction.block();
@@ -190,8 +220,8 @@ public class LockManager {
             if (getLockType(transaction, name) == lockType) {
                 throw new NoLockHeldException("Error: Duplicate Lock!");
             }
-            long tNum = transaction.getTransNum();
             ResourceEntry rEntry = getResourceEntry(name);
+            Long tNum = transaction.getTransNum();
             // no exception => -1
             // if not compatible, then should block
             shouldBlock = !rEntry.checkCompatible(lockType, -1);
