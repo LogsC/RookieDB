@@ -79,7 +79,28 @@ public class LockManager {
          */
         public void grantOrUpdateLock(Lock lock) {
             // TODO(proj4_part1): implement
-            return;
+            long tNum = lock.transactionNum;
+            // if no lock on this resource, grant the lock
+            if (getTransactionLockType(tNum) == LockType.NL) {
+                transactionLocks.putIfAbsent(tNum, new ArrayList<>());
+                transactionLocks.get(tNum).add(lock);
+                // add lock to locks
+                locks.add(lock);
+            } else {
+                for (Lock tLock : transactionLocks.get(tNum)) {
+                    // update locks per transaction
+                    if (tLock.name.equals(lock.name)) {
+                        tLock.lockType = lock.lockType;
+                    }
+                }
+
+                for (Lock rLock : locks) {
+                    // update locks
+                    if (rLock.name.equals(lock.name)) {
+                        rLock.lockType = lock.lockType;
+                    }
+                }
+            }
         }
 
         /**
@@ -133,7 +154,7 @@ public class LockManager {
                     transaction.unblock();
                 } else {
                     // stop when next lock cannot be granted
-                    return;
+                    break;
                 }
             }
         }
