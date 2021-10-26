@@ -187,11 +187,34 @@ public class LockManager {
         // synchronized block elsewhere if you wish.
         boolean shouldBlock = false;
         synchronized (this) {
-            if (getLockType(transaction, name) == LockType.NL) {
+            if (getLockType(transaction, name) == lockType) {
                 throw new NoLockHeldException("Error: Duplicate Lock!");
             }
             long tNum = transaction.getTransNum();
             ResourceEntry rEntry = getResourceEntry(name);
+            // no exception => -1
+            // if not compatible, then should block
+            shouldBlock = !rEntry.checkCompatible(lockType, -1);
+            // check other transactions in queue (assuming no need to block)
+            if (!shouldBlock) {
+                for (LockRequest lReq : rEntry.waitingQueue) {
+                    if (lReq.lock.name == name) {
+                        shouldBlock = true;
+                    }
+                }
+            }
+            // lock to be acquired
+            Lock aLock = new Lock(name, lockType, tNum);
+            // if not block, then grant / update, else move to queue
+            if (!shouldBlock) {
+                rEntry.grantOrUpdateLock(aLock);
+            } else {
+                // new LockRequest, add to waiting queue
+                LockRequest lReq = new LockRequest(transaction, aLock);
+                rEntry.waitingQueue.addLast(lReq);
+                // avoid race condition???
+                // transaction.prepareBlock();
+            }
         }
         if (shouldBlock) {
             transaction.block();
