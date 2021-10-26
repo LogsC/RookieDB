@@ -104,7 +104,7 @@ public class LockManager {
             if (addFront) {
                 waitingQueue.addFirst(request);
             } else {
-                waitingQueue.add(request);
+                waitingQueue.addLast(request);
             }
         }
 
@@ -329,7 +329,31 @@ public class LockManager {
         // You may modify any part of this method.
         boolean shouldBlock = false;
         synchronized (this) {
-            
+            LockType oldLockType = getLockType(transaction, name);
+            // check lock exceptions
+            if (oldLockType.equals(newLockType)) {
+                throw new DuplicateLockRequestException("Error: Duplicate Lock!");
+            }
+            if (oldLockType.equals(LockType.NL)) {
+                throw new NoLockHeldException("Error: No Lock!");
+            }
+            if (!LockType.substitutable(newLockType, oldLockType)) {
+                throw new InvalidLockException("Error: Invalid Lock Substitution!");
+            }
+            // promote lock
+            ResourceEntry rEntry = getResourceEntry(name);
+            Long tNum = transaction.getTransNum();
+            shouldBlock = !rEntry.checkCompatible(newLockType, tNum);
+            Lock aLock = new Lock(name, newLockType, tNum);
+            if (!shouldBlock) {
+                // update lock
+                rEntry.grantOrUpdateLock(aLock);
+            } else {
+                // new LockRequest, add to waiting queue
+                LockRequest lReq = new LockRequest(transaction, aLock);
+                rEntry.waitingQueue.addFirst(lReq);
+                // transaction.prepareBlock(); ???
+            }
         }
         if (shouldBlock) {
             transaction.block();
@@ -343,6 +367,12 @@ public class LockManager {
     public synchronized LockType getLockType(TransactionContext transaction, ResourceName name) {
         // TODO(proj4_part1): implement
         ResourceEntry resourceEntry = getResourceEntry(name);
+        Long tNum = transaction.getTransNum();
+        for (Lock l : resourceEntry.locks) {
+            if (l.transactionNum == tNum) {
+                return l.lockType;
+            }
+        }
         return LockType.NL;
     }
 
