@@ -287,8 +287,8 @@ public class LockManager {
         // synchronized block elsewhere if you wish.
         boolean shouldBlock = false;
         synchronized (this) {
-            if (getLockType(transaction, name) == lockType) {
-                throw new NoLockHeldException("Error: Duplicate Lock!");
+            if (getLockType(transaction, name) != LockType.NL) {
+                throw new DuplicateLockRequestException("Error: Duplicate Lock!");
             }
             ResourceEntry rEntry = getResourceEntry(name);
             Long tNum = transaction.getTransNum();
