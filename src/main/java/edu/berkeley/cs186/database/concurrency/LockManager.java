@@ -1,5 +1,6 @@
 package edu.berkeley.cs186.database.concurrency;
 
+import edu.berkeley.cs186.database.Transaction;
 import edu.berkeley.cs186.database.TransactionContext;
 
 import java.util.*;
@@ -117,7 +118,24 @@ public class LockManager {
             Iterator<LockRequest> requests = waitingQueue.iterator();
 
             // TODO(proj4_part1): implement
-            return;
+            // iterate through existing requests
+            while (requests.hasNext()) {
+                LockRequest req = requests.next();
+                Lock lock = req.lock;
+                TransactionContext transaction = req.transaction;
+
+                // checkCompatible(LockType lockType, long except)
+                if (checkCompatible(lock.lockType, transaction.getTransNum())) {
+                    // still need to implement grantOrUpdateLock
+                    grantOrUpdateLock(lock);
+                    requests.remove();
+                    // unblock transaction once request granted
+                    transaction.unblock();
+                } else {
+                    // stop when next lock cannot be granted
+                    return;
+                }
+            }
         }
 
         /**
