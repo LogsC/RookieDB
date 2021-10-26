@@ -395,9 +395,8 @@ public class LockManager {
             // promote lock
             ResourceEntry rEntry = getResourceEntry(name);
             Long tNum = transaction.getTransNum();
-            shouldBlock = !rEntry.checkCompatible(newLockType, tNum);
             Lock aLock = new Lock(name, newLockType, tNum);
-            if (!shouldBlock) {
+            if (rEntry.checkCompatible(newLockType, tNum)) {
                 // update lock
                 rEntry.grantOrUpdateLock(aLock);
             } else {
