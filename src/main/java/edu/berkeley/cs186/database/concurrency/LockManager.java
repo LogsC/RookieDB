@@ -187,7 +187,11 @@ public class LockManager {
         // synchronized block elsewhere if you wish.
         boolean shouldBlock = false;
         synchronized (this) {
-            
+            if (getLockType(transaction, name) == LockType.NL) {
+                throw new NoLockHeldException("Error: Duplicate Lock!");
+            }
+            long tNum = transaction.getTransNum();
+            ResourceEntry rEntry = getResourceEntry(name);
         }
         if (shouldBlock) {
             transaction.block();
@@ -209,7 +213,20 @@ public class LockManager {
         // TODO(proj4_part1): implement
         // You may modify any part of this method.
         synchronized (this) {
-            
+            if (getLockType(transaction, name) == LockType.NL) {
+                throw new NoLockHeldException("Error: No Lock!");
+            }
+            ResourceEntry rEntry = getResourceEntry(name);
+            Lock rLock = null;
+            Long tNum = transaction.getTransNum();
+            List<Lock> tLocks = transactionLocks.get(tNum);
+            for (Lock lock : tLocks) {
+                if (lock.name.equals(name)) {
+                    rLock = lock;
+                    break;
+                }
+            }
+            rEntry.releaseLock(rLock);
         }
     }
 
