@@ -164,6 +164,17 @@ public class LockManager {
          */
         public LockType getTransactionLockType(long transaction) {
             // TODO(proj4_part1): implement
+            // no locks = no lock
+            if (locks.isEmpty()) {
+                return LockType.NL;
+            }
+            List<Lock> tLocks = transactionLocks.get(transaction);
+            ResourceName rName = locks.get(0).name;
+            for (Lock lock : tLocks) {
+                if (lock.name == rName) {
+                    return lock.lockType;
+                }
+            }
             return LockType.NL;
         }
 
@@ -230,16 +241,18 @@ public class LockManager {
             }
             Lock aLock = new Lock(name, lockType, tNum);
             // check for compatibility excluding current transaction
-            shouldBlock = !rEntry.checkCompatible(lockType, tNum);
-            if (!shouldBlock) {
+            if (rEntry.checkCompatible(lockType, tNum)) {
                 // release lock
                 for (ResourceName rName : releaseNames) {
                     List<Lock> tLocks = transactionLocks.get(tNum);
+                    Lock release = null;
                     for (Lock lock : tLocks) {
                         if (lock.name.equals(rName)) {
-                            getResourceEntry(rName).releaseLock(lock);
+                            release = lock;
+                            break;
                         }
                     }
+                    getResourceEntry(rName).releaseLock(release);
                 }
                 // grant lock
                 rEntry.grantOrUpdateLock(aLock);
@@ -300,7 +313,7 @@ public class LockManager {
                 LockRequest lReq = new LockRequest(transaction, aLock);
                 rEntry.waitingQueue.addLast(lReq);
                 // avoid race condition???
-                // transaction.prepareBlock();
+                transaction.prepareBlock();
             }
         }
         if (shouldBlock) {
