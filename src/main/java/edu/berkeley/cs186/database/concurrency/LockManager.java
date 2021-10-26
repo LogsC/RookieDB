@@ -59,7 +59,16 @@ public class LockManager {
          */
         public boolean checkCompatible(LockType lockType, long except) {
             // TODO(proj4_part1): implement
-            return false;
+            for (Lock lock : locks) {
+                // checking if conflict (compatible)
+                if (!LockType.compatible(lock.lockType, lockType)) {
+                    // may only allow conflict if transaction with id 'except'
+                    if (!lock.transactionNum.equals(except)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         /**
@@ -78,7 +87,12 @@ public class LockManager {
          */
         public void releaseLock(Lock lock) {
             // TODO(proj4_part1): implement
-            return;
+            // transactionLocks format: <Long, List<Lock>>
+            // get transactionNum of lock to get the List<Lock> and remove lock
+            long id = lock.transactionNum; // key
+            transactionLocks.get(id).remove(lock);
+            locks.remove(lock);
+            processQueue();
         }
 
         /**
@@ -87,7 +101,11 @@ public class LockManager {
          */
         public void addToQueue(LockRequest request, boolean addFront) {
             // TODO(proj4_part1): implement
-            return;
+            if (addFront) {
+                waitingQueue.addFirst(request);
+            } else {
+                waitingQueue.add(request);
+            }
         }
 
         /**
