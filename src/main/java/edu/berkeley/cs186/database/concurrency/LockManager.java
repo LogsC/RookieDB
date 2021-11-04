@@ -229,7 +229,7 @@ public class LockManager {
         // move the synchronized block elsewhere if you wish.
         boolean shouldBlock = false;
         synchronized (this) {
-            if (getLockType(transaction, name) == lockType) {
+            if (getLockType(transaction, name) != LockType.NL && !releaseNames.contains(name)) {
                 throw new DuplicateLockRequestException("Error: Duplicate Lock!");
             }
             ResourceEntry rEntry = getResourceEntry(name);
