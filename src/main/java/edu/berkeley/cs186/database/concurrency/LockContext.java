@@ -140,6 +140,7 @@ public class LockContext {
         if (numChildLocks.getOrDefault(transaction.getTransNum(), 0) > 0) {
             throw new InvalidLockException("Error: Invalid Lock Release!");
         }
+        this.lockman.release(transaction, name);
         if (parentContext() != null) {
             if (parentContext().getNumChildren(transaction) < 1) {
                 // no more children for transaction
@@ -200,7 +201,7 @@ public class LockContext {
                 LockContext currLC = LockContext.fromResourceName(lockman, rName);
                 LockContext parentLC = currLC.parentContext();
                 parentLC.numChildLocks.put(transaction.getTransNum(),
-                        parentLC.numChildLocks.get(transaction.getTransNum() - 1));
+                        parentLC.numChildLocks.get(transaction.getTransNum()) - 1);
             }
         } else {
             // no S / IS locks to release
@@ -284,7 +285,7 @@ public class LockContext {
             LockContext currLC = LockContext.fromResourceName(lockman, rName);
             currLC.numChildLocks.put(transaction.getTransNum(), 0);
         }
-        return;
+        // return;
     }
 
     /**
