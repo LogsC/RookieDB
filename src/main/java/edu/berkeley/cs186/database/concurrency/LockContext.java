@@ -97,13 +97,13 @@ public class LockContext {
     public void acquire(TransactionContext transaction, LockType lockType)
             throws InvalidLockException, DuplicateLockRequestException {
         // TODO(proj4_part2): implement
-        if (readonly) {
+        if (this.readonly) {
             throw new UnsupportedOperationException("Error: This Lock Context is readonly!");
         }
         if (lockman.getLockType(transaction, name) != LockType.NL) {
             throw new DuplicateLockRequestException("Error: Duplicate Lock!");
         }
-        if (parentContext() == null || !LockType.canBeParentLock(
+        if (parentContext() != null && !LockType.canBeParentLock(
                 parentContext().getExplicitLockType(transaction), lockType)) {
             throw new InvalidLockException("Error: Invalid Lock Acquire!");
         }
@@ -173,10 +173,10 @@ public class LockContext {
     public void promote(TransactionContext transaction, LockType newLockType)
             throws DuplicateLockRequestException, NoLockHeldException, InvalidLockException {
         // TODO(proj4_part2): implement
-        LockType oldLT = getExplicitLockType(transaction);
         if (readonly) {
             throw new UnsupportedOperationException("Error: This Lock Context is readonly!");
         }
+        LockType oldLT = getExplicitLockType(transaction);
         if (oldLT == LockType.NL) {
             throw new NoLockHeldException("Error: No Lock!");
         }
@@ -191,12 +191,12 @@ public class LockContext {
         }
         if (newLockType == LockType.SIX && (oldLT == LockType.IS || oldLT == LockType.IX)) {
             // get S / IS descendants to release
-            List<ResourceName> sisDesc = sisDescendants(transaction);
-            sisDesc.add(0, this.name);
+            List<ResourceName> releaseDesc = sisDescendants(transaction);
+            releaseDesc.add(0, this.name);
             // release old locks, acquire new locks
-            lockman.acquireAndRelease(transaction, name, newLockType, sisDesc);
+            lockman.acquireAndRelease(transaction, name, newLockType, releaseDesc);
             // update numChildLocks
-            for (ResourceName rName: sisDesc.subList(1, sisDesc.size())) {
+            for (ResourceName rName: releaseDesc.subList(1, releaseDesc.size())) {
                 LockContext currLC = LockContext.fromResourceName(lockman, rName);
                 LockContext parentLC = currLC.parentContext();
                 parentLC.numChildLocks.put(transaction.getTransNum(),
@@ -244,7 +244,46 @@ public class LockContext {
      */
     public void escalate(TransactionContext transaction) throws NoLockHeldException {
         // TODO(proj4_part2): implement
-
+        if (readonly) {
+            throw new UnsupportedOperationException("Error: This Lock Context is readonly!");
+        }
+        LockType oldLT = getExplicitLockType(transaction);
+        if (oldLT == LockType.NL) {
+            throw new NoLockHeldException("Error: No Lock!");
+        }
+        // escalate lock and descendants to be released
+        LockType escLT = LockType.S;
+        List<ResourceName> releaseDesc = new ArrayList<>();
+        for (Lock l : lockman.getLocks(transaction)) {
+            if (l.name == this.name) {
+                // if lock is same as this
+                // add to list to release this.name later
+                releaseDesc.add(this.name);
+                if (l.lockType == LockType.SIX || l.lockType == LockType.IX) {
+                    escLT = LockType.X;
+                } else if (l.lockType == LockType.S || l.lockType == LockType.X) {
+                    // return w/o mutating calls for repeat escalate
+                    return;
+                }
+            } else if (l.name.isDescendantOf(this.name)) {
+                // if lock is descendant of this
+                // add to list to release l.name later
+                releaseDesc.add(l.name);
+                LockType childLT = l.lockType;
+                if (childLT == LockType.IX || childLT == LockType.X || childLT == LockType.SIX) {
+                    escLT = LockType.X;
+                }
+            }
+        }
+        // escalate lock type != old lock type and is valid substitution
+        if (escLT != oldLT && LockType.substitutable(escLT, oldLT)) {
+            lockman.acquireAndRelease(transaction, this.name, escLT, releaseDesc);
+        }
+        // update numChildLocks
+        for (ResourceName rName: releaseDesc) {
+            LockContext currLC = LockContext.fromResourceName(lockman, rName);
+            currLC.numChildLocks.put(transaction.getTransNum(), 0);
+        }
         return;
     }
 
@@ -255,7 +294,7 @@ public class LockContext {
     public LockType getExplicitLockType(TransactionContext transaction) {
         if (transaction == null) return LockType.NL;
         // TODO(proj4_part2): implement
-        return LockType.NL;
+        return this.lockman.getLockType(transaction, name);
     }
 
     /**
@@ -267,7 +306,23 @@ public class LockContext {
     public LockType getEffectiveLockType(TransactionContext transaction) {
         if (transaction == null) return LockType.NL;
         // TODO(proj4_part2): implement
-        return LockType.NL;
+        LockType explicitLT = getExplicitLockType(transaction);
+        if (explicitLT != LockType.NL) {
+            return explicitLT;
+        }
+        // iterate through parentContexts
+        LockContext currContext = parentContext();
+        while (currContext != null) {
+            explicitLT = currContext.getExplicitLockType(transaction);
+            currContext = currContext.parentContext();
+        }
+        if (explicitLT == LockType.IS || explicitLT == LockType.IX) {
+            return LockType.NL;
+        }
+        if (explicitLT == LockType.SIX) {
+            return LockType.S;
+        }
+        return explicitLT;
     }
 
     /**
