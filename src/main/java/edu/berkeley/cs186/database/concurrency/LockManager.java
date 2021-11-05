@@ -143,15 +143,15 @@ public class LockManager {
             while (requests.hasNext()) {
                 LockRequest req = requests.next();
                 Lock lock = req.lock;
-                TransactionContext transaction = req.transaction;
+                long tNum = req.transaction.getTransNum();
 
                 // checkCompatible(LockType lockType, long except)
-                if (checkCompatible(lock.lockType, transaction.getTransNum())) {
+                if (checkCompatible(lock.lockType, tNum)) {
                     // still need to implement grantOrUpdateLock
                     grantOrUpdateLock(lock);
                     requests.remove();
                     // unblock transaction once request granted
-                    transaction.unblock();
+                    req.transaction.unblock();
                 } else {
                     // stop when next lock cannot be granted
                     break;
@@ -169,6 +169,9 @@ public class LockManager {
                 return LockType.NL;
             }
             List<Lock> tLocks = transactionLocks.get(transaction);
+            if (tLocks == null || tLocks.isEmpty()) {
+                return LockType.NL;
+            }
             ResourceName rName = locks.get(0).name;
             for (Lock lock : tLocks) {
                 if (lock.name == rName) {
@@ -239,9 +242,10 @@ public class LockManager {
                     throw new NoLockHeldException("Error: No Lock!");
                 }
             }
+            shouldBlock = !rEntry.checkCompatible(lockType, tNum);
             Lock aLock = new Lock(name, lockType, tNum);
             // check for compatibility excluding current transaction
-            if (rEntry.checkCompatible(lockType, tNum)) {
+            if (!shouldBlock) {
                 // release lock
                 for (ResourceName rName : releaseNames) {
                     List<Lock> tLocks = transactionLocks.get(tNum);
@@ -260,7 +264,7 @@ public class LockManager {
                 // should block => add to queue
                 LockRequest lReq = new LockRequest(transaction, aLock);
                 rEntry.waitingQueue.addLast(lReq);
-                // transaction.prepareBlock(); ?
+                transaction.prepareBlock();
             }
         }
         if (shouldBlock) {
@@ -291,7 +295,7 @@ public class LockManager {
                 throw new DuplicateLockRequestException("Error: Duplicate Lock!");
             }
             ResourceEntry rEntry = getResourceEntry(name);
-            Long tNum = transaction.getTransNum();
+            long tNum = transaction.getTransNum();
             // no exception => -1
             // if not compatible, then should block
             shouldBlock = !rEntry.checkCompatible(lockType, -1);
@@ -394,16 +398,17 @@ public class LockManager {
             }
             // promote lock
             ResourceEntry rEntry = getResourceEntry(name);
-            Long tNum = transaction.getTransNum();
+            long tNum = transaction.getTransNum();
+            shouldBlock = !rEntry.checkCompatible(newLockType, tNum);
             Lock aLock = new Lock(name, newLockType, tNum);
-            if (rEntry.checkCompatible(newLockType, tNum)) {
+            if (!shouldBlock) {
                 // update lock
                 rEntry.grantOrUpdateLock(aLock);
             } else {
                 // new LockRequest, add to waiting queue
                 LockRequest lReq = new LockRequest(transaction, aLock);
                 rEntry.waitingQueue.addFirst(lReq);
-                // transaction.prepareBlock(); ???
+                transaction.prepareBlock();
             }
         }
         if (shouldBlock) {

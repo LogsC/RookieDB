@@ -312,7 +312,7 @@ public class LockContext {
         }
         // iterate through parentContexts
         LockContext currContext = parentContext();
-        while (currContext != null) {
+        while (currContext != null && explicitLT == LockType.NL) {
             explicitLT = currContext.getExplicitLockType(transaction);
             currContext = currContext.parentContext();
         }
