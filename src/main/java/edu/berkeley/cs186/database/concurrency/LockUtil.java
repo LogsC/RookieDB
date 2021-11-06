@@ -48,53 +48,50 @@ public class LockUtil {
         // TODO(proj4_part2): implement
         // check ancestors
         // *requestType must be S, X, NL
-        // To get S lock on a node, must hold ISon parent node
-        // To get X on a node, must hold IX on parent node
+        // S: To get S lock on a node, must hold IS on parent node
+        // X: To get X on a node, must hold IX on parent node
+        // NL: Requesting NL should do nothing
         if (requestType == LockType.S) {
             ensureAncestors(lockContext, LockType.IS);
         } else if (requestType == LockType.X) {
             ensureAncestors(lockContext, LockType.IX);
+        } else {
+            // requestType == LockType.NL
+            return;
         }
 
-        // case 1: current lock type can effectively substitute the requested type
         if (LockType.substitutable(effectiveLockType, requestType)) {
+            // case 1: current lock type can effectively substitute the requested type
             lockContext.promote(transaction, requestType);
-        }
-        // case 2: current lock type is IX and the requested lock is S
-        else if (explicitLockType == LockType.IX && requestType == LockType.S) {
+        } else if (explicitLockType == LockType.IX && requestType == LockType.S) {
+            // case 2: current lock type is IX and the requested lock is S
             lockContext.promote(transaction, LockType.SIX);
-        }
-        // case 3: current lock type is an intent lock
-        else if (explicitLockType.isIntent()) {
+        } else if (explicitLockType.isIntent()) {
+            // case 3: current lock type is an intent lock
             lockContext.escalate(transaction);
-        }
-        // case 4: none of the above
-        // if LockType is NL
-        else if (explicitLockType == LockType.NL) {
+        } else if (explicitLockType == LockType.NL) {
             lockContext.acquire(transaction, requestType);
-        }
-        else {
-            // blahbalbhab
-            return;
+        } else {
+            lockContext.promote(transaction, requestType);
         }
     }
 
     // TODO(proj4_part2) add any helper methods you want
     // ensures you have the appropriate locks on all ancestors
-    public static void ensureAncestors(LockContext lockContext, LockType reqType) {
+    // appropriate will either be IS or IX
+    public static void ensureAncestors(LockContext lockContext, LockType appropriate) {
         TransactionContext transaction = TransactionContext.getTransaction();
-        ArrayDeque<LockContext> ancestors = getAncestors(lockContext);
 
         // iterate through all ancestors, starting from root
-        for (LockContext pContext : ancestors) {
+        for (LockContext pContext : getAncestors(lockContext)) {
             LockType pType = pContext.getEffectiveLockType(transaction);
-            if (pType != reqType) {
-                if (LockType.substitutable(pType, reqType)) {
-                    pContext.promote(transaction, reqType);
-                } else if ((pType == LockType.IX && reqType == LockType.S) || (pType == LockType.S && reqType == LockType.IX)) {
+            if (pType != appropriate) {
+                if (pType == LockType.NL) {
+                    pContext.acquire(transaction, appropriate);
+                } else if (pType == LockType.S && appropriate == LockType.IX) {
                     pContext.promote(transaction, LockType.SIX);
-                } else if (reqType == LockType.NL) {
-                    lockContext.acquire(transaction, reqType);
+                } else if (LockType.substitutable(appropriate, pType)) {
+                    pContext.promote(transaction, appropriate);
                 }
             }
         }
