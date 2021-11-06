@@ -62,16 +62,19 @@ public class LockUtil {
 
         if (LockType.substitutable(effectiveLockType, requestType)) {
             // case 1: current lock type can effectively substitute the requested type
-            lockContext.promote(transaction, requestType);
+            return;
         } else if (explicitLockType == LockType.IX && requestType == LockType.S) {
             // case 2: current lock type is IX and the requested lock is S
             lockContext.promote(transaction, LockType.SIX);
         } else if (explicitLockType.isIntent()) {
             // case 3: current lock type is an intent lock
             lockContext.escalate(transaction);
+            ensureSufficientLockHeld(lockContext, requestType);
         } else if (explicitLockType == LockType.NL) {
+            // case 4 pt 1: none of the above (explicitLockType == NL)
             lockContext.acquire(transaction, requestType);
         } else {
+            // case 4 pt 2: none of the above (explicitLockType == S or X)
             lockContext.promote(transaction, requestType);
         }
     }
