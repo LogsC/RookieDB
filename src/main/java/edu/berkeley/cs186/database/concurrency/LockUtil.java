@@ -2,6 +2,10 @@ package edu.berkeley.cs186.database.concurrency;
 
 import edu.berkeley.cs186.database.TransactionContext;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Queue;
+
 /**
  * LockUtil is a declarative layer which simplifies multigranularity lock
  * acquisition for the user (you, in the last task of Part 2). Generally
@@ -42,8 +46,69 @@ public class LockUtil {
         LockType explicitLockType = lockContext.getExplicitLockType(transaction);
 
         // TODO(proj4_part2): implement
-        return;
+        // check ancestors
+        // *requestType must be S, X, NL
+        // To get S lock on a node, must hold ISon parent node
+        // To get X on a node, must hold IX on parent node
+        if (requestType == LockType.S) {
+            ensureAncestors(lockContext, LockType.IS);
+        } else if (requestType == LockType.X) {
+            ensureAncestors(lockContext, LockType.IX);
+        }
+
+        // case 1: current lock type can effectively substitute the requested type
+        if (LockType.substitutable(effectiveLockType, requestType)) {
+            lockContext.promote(transaction, requestType);
+        }
+        // case 2: current lock type is IX and the requested lock is S
+        else if (explicitLockType == LockType.IX && requestType == LockType.S) {
+            lockContext.promote(transaction, LockType.SIX);
+        }
+        // case 3: current lock type is an intent lock
+        else if (explicitLockType.isIntent()) {
+            lockContext.escalate(transaction);
+        }
+        // case 4: none of the above
+        // if LockType is NL
+        else if (explicitLockType == LockType.NL) {
+            lockContext.acquire(transaction, requestType);
+        }
+        else {
+            // blahbalbhab
+            return;
+        }
     }
 
     // TODO(proj4_part2) add any helper methods you want
+    // ensures you have the appropriate locks on all ancestors
+    public static void ensureAncestors(LockContext lockContext, LockType reqType) {
+        TransactionContext transaction = TransactionContext.getTransaction();
+        ArrayDeque<LockContext> ancestors = getAncestors(lockContext);
+
+        // iterate through all ancestors, starting from root
+        for (LockContext pContext : ancestors) {
+            LockType pType = pContext.getEffectiveLockType(transaction);
+            if (pType != reqType) {
+                if (LockType.substitutable(pType, reqType)) {
+                    pContext.promote(transaction, reqType);
+                } else if ((pType == LockType.IX && reqType == LockType.S) || (pType == LockType.S && reqType == LockType.IX)) {
+                    pContext.promote(transaction, LockType.SIX);
+                } else if (reqType == LockType.NL) {
+                    lockContext.acquire(transaction, reqType);
+                }
+            }
+        }
+    }
+
+    // helper method to get all ancestors
+    public static ArrayDeque<LockContext> getAncestors(LockContext lockContext) {
+        LockContext parContext = lockContext.parentContext();
+        ArrayDeque<LockContext> ancestors = new ArrayDeque<LockContext>();
+        while (parContext != null) {
+            // add to front of arrayDeque so goes top->bottom
+            ancestors.addFirst(parContext);
+            parContext = parContext.parentContext();
+        }
+        return ancestors;
+    }
 }
