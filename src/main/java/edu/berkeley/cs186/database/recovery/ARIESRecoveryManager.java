@@ -93,7 +93,13 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public long commit(long transNum) {
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry tEntry = transactionTable.get(transNum);
+        long prevLSN = tEntry.lastLSN;
+        long lsn = logManager.appendToLog(new CommitTransactionLogRecord(transNum, prevLSN));
+        pageFlushHook(lsn);
+        tEntry.lastLSN = lsn;
+        tEntry.transaction.setStatus(Transaction.Status.COMMITTING);
+        return lsn;
     }
 
     /**
@@ -109,7 +115,12 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public long abort(long transNum) {
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry tEntry = transactionTable.get(transNum);
+        long prevLSN = tEntry.lastLSN;
+        long lsn = logManager.appendToLog(new AbortTransactionLogRecord(transNum, prevLSN));
+        tEntry.lastLSN = lsn;
+        tEntry.transaction.setStatus(Transaction.Status.ABORTING);
+        return lsn;
     }
 
     /**
@@ -127,7 +138,14 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public long end(long transNum) {
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry tEntry = transactionTable.get(transNum);
+        long prevLSN = transactionTable.get(transNum).lastLSN;
+        if (tEntry.transaction.getStatus() == Transaction.Status.ABORTING) {
+            prevLSN = rollbackToLSN(transNum, 0);
+        }
+        transactionTable.remove(transNum);
+        tEntry.transaction.setStatus(Transaction.Status.COMPLETE);
+        return logManager.appendToLog(new EndTransactionLogRecord(transNum, prevLSN));
     }
 
     /**
@@ -147,7 +165,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
      * @param transNum transaction to perform a rollback for
      * @param LSN LSN to which we should rollback
      */
-    private void rollbackToLSN(long transNum, long LSN) {
+    private long rollbackToLSN(long transNum, long LSN) {
         TransactionTableEntry transactionEntry = transactionTable.get(transNum);
         LogRecord lastRecord = logManager.fetchLogRecord(transactionEntry.lastLSN);
         long lastRecordLSN = lastRecord.getLSN();
@@ -155,6 +173,25 @@ public class ARIESRecoveryManager implements RecoveryManager {
         // back from the next record that hasn't yet been undone.
         long currentLSN = lastRecord.getUndoNextLSN().orElse(lastRecordLSN);
         // TODO(proj5) implement the rollback logic described above
+        while (currentLSN > LSN) {
+            LogRecord currLR = logManager.fetchLogRecord(currentLSN);
+            if (currLR.isUndoable()) {
+                LogRecord compensationLR = currLR.undo(lastRecordLSN);
+                lastRecordLSN = logManager.appendToLog(compensationLR);
+                compensationLR.redo(this, diskSpaceManager, bufferManager);
+            }
+            // update the current LSN to that of the next record to undo
+            if (!currLR.getUndoNextLSN().isPresent()) {
+                if (!currLR.getPrevLSN().isPresent()) {
+                    break;
+                } else {
+                    currentLSN = currLR.getPrevLSN().get();
+                }
+            } else {
+                currentLSN = currLR.getUndoNextLSN().get();
+            }
+        }
+        return lastRecordLSN;
     }
 
     /**
@@ -205,7 +242,14 @@ public class ARIESRecoveryManager implements RecoveryManager {
         assert (before.length == after.length);
         assert (before.length <= BufferManager.EFFECTIVE_PAGE_SIZE / 2);
         // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry tEntry = transactionTable.get(transNum);
+        long prevLSN = tEntry.lastLSN;
+        long lsn = logManager.appendToLog(new UpdatePageLogRecord(transNum, pageNum, prevLSN, pageOffset, before, after));
+        tEntry.lastLSN = lsn;
+        if (!dirtyPageTable.containsKey(pageNum)) {
+            dirtyPageTable.put(pageNum, lsn);
+        }
+        return lsn;
     }
 
     /**
@@ -381,7 +425,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         long savepointLSN = transactionEntry.getSavepoint(name);
 
         // TODO(proj5): implement
-        return;
+        rollbackToLSN(transNum, savepointLSN);
     }
 
     /**
@@ -408,6 +452,8 @@ public class ARIESRecoveryManager implements RecoveryManager {
         Map<Long, Pair<Transaction.Status, Long>> chkptTxnTable = new HashMap<>();
 
         // TODO(proj5): generate end checkpoint record(s) for DPT and transaction table
+        // iterate through both DPT and transaction table until both empty
+        Iterator<Map.Entry<Long, Long>> dptIter = dirtyPageTable.entrySet().iterator();
 
         // Last end checkpoint record
         LogRecord endRecord = new EndCheckpointLogRecord(chkptDPT, chkptTxnTable);
