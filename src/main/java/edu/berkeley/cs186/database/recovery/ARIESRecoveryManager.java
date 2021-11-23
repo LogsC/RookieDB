@@ -454,6 +454,29 @@ public class ARIESRecoveryManager implements RecoveryManager {
         // TODO(proj5): generate end checkpoint record(s) for DPT and transaction table
         // iterate through both DPT and transaction table until both empty
         Iterator<Map.Entry<Long, Long>> dptIter = dirtyPageTable.entrySet().iterator();
+        Iterator<Map.Entry<Long, TransactionTableEntry>> tTIter = transactionTable.entrySet().iterator();
+        while (true) {
+            // if adding another entry will overflow the record, add a chkpt record
+            if (!EndCheckpointLogRecord.fitsInOneRecord(chkptDPT.size(), chkptTxnTable.size() + 1) ||
+                    !EndCheckpointLogRecord.fitsInOneRecord(chkptDPT.size() + 1, chkptTxnTable.size())) {
+                // add new chkpt record w/ curr chkpt dirty page table and chkpt transaction table
+                logManager.appendToLog(new EndCheckpointLogRecord(chkptDPT, chkptTxnTable));
+                // reset chkpt tables
+                chkptDPT.clear();
+                chkptTxnTable.clear();
+            }
+            // grab next entry from dirty page table or transaction table
+            if (dptIter.hasNext()) {
+                Map.Entry<Long, Long> nextEntry = dptIter.next();
+                chkptDPT.put(nextEntry.getKey(), nextEntry.getValue());
+            } else if (tTIter.hasNext()) {
+                Map.Entry<Long, TransactionTableEntry> nextEntry = tTIter.next();
+                TransactionTableEntry eVal = nextEntry.getValue();
+                chkptTxnTable.put(nextEntry.getKey(), new Pair<Transaction.Status, Long>(eVal.transaction.getStatus(), eVal.lastLSN));
+            } else {
+                break;
+            }
+        }
 
         // Last end checkpoint record
         LogRecord endRecord = new EndCheckpointLogRecord(chkptDPT, chkptTxnTable);
