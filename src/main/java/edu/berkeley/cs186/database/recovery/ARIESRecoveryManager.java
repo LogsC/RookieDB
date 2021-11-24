@@ -596,25 +596,30 @@ public class ARIESRecoveryManager implements RecoveryManager {
         while (iter.hasNext()) {
             LogRecord currRecord = iter.next();
             LogType type = currRecord.getType();
-            Long transNum = null;
-            TransactionTableEntry entry = null;
+            // Long transNum;
+            // TransactionTableEntry entry;
 
             // if the log record is for a transaction operation (getTransNum is present)--> update the transaction table
             if (currRecord.getTransNum().isPresent()) {
                 // transactionTable.replace(currRecord.getTransNum(), new TransactionTableEntry());
-                transNum = currRecord.getTransNum().get();
-                entry = transactionTable.get(transNum);
-                if (transactionTable.containsKey(transNum)) {
-                   entry.lastLSN = currRecord.getLSN();
-                } else {
+                long transNum = currRecord.getTransNum().get();
+
+                if (!transactionTable.containsKey(transNum)) {
                     Transaction trans = newTransaction.apply(transNum);
                     startTransaction(trans); // will add to table
+                    // put txn in txnTbl again but with transNum ?
+                    transactionTable.put(transNum, new TransactionTableEntry(trans));
+                    // transEntry.lastLSN = currRecord.getLSN();
+                }
+                TransactionTableEntry transEntry = transactionTable.get(transNum);
+                if (transEntry.lastLSN < currRecord.getLSN()) {
+                    transEntry.lastLSN = currRecord.getLSN();
                 }
             }
 
             // If the log record is page-related (getPageNum is present), update the dpt
             if (currRecord.getPageNum().isPresent()) {
-                Long pageNum = currRecord.getPageNum().get();
+                long pageNum = currRecord.getPageNum().get();
                 if (type == LogType.UPDATE_PAGE || type == LogType.UNDO_UPDATE_PAGE) {
                     // if update/undoupdate and not in table, add in
                     // if it is already in table we do not want to update (recLSN = first occ)
@@ -630,58 +635,70 @@ public class ARIESRecoveryManager implements RecoveryManager {
 
             // * If the log record is for a change in transaction status:
             if (type == LogType.COMMIT_TRANSACTION) {
-                entry = transactionTable.get(transNum);
+                TransactionTableEntry entry = transactionTable.get(currRecord.getTransNum().get());
                 entry.transaction.setStatus(Transaction.Status.COMMITTING);
             } else if (type == LogType.ABORT_TRANSACTION) {
-                entry = transactionTable.get(transNum);
+                TransactionTableEntry entry = transactionTable.get(currRecord.getTransNum().get());
                 entry.transaction.setStatus(Transaction.Status.RECOVERY_ABORTING);
             } else if (type == LogType.END_TRANSACTION) {
                 // clean up transaction, remove from table, add to endedTransactions
-                entry = transactionTable.get(transNum);
+                long transNum = currRecord.getTransNum().get();
+                TransactionTableEntry entry = transactionTable.get(transNum);
                 entry.transaction.cleanup();
                 entry.transaction.setStatus(Transaction.Status.COMPLETE);
                 transactionTable.remove(transNum);
-                endedTransactions.remove(transNum);
+                endedTransactions.add(transNum);
             }
-
-            // * If the log record is an end_checkpoint record:
+            /*
+             * If the log record is an end_checkpoint record:
+             *      - Copy all entries of checkpoint DPT (replace existing entries if any)
+             *      - Skip txn table entries for transactions that have already ended
+             *      - Add to transaction table if not already present
+             *      - Update lastLSN to be the larger of the existing entry's (if any) and
+             *        the checkpoint's
+             *      - The status's in the transaction table should be updated if it is possible
+             *        to transition from the status in the table to the status in th
+             *        checkpoint. For example, running -> aborting is a possible transition,
+             *        but aborting -> running is not.
+             */
+            // If the log record is an end_checkpoint record:
             if (type == LogType.END_CHECKPOINT) {
                 Map<Long, Long> checkDPT = currRecord.getDirtyPageTable();
                 Map<Long, Pair<Transaction.Status, Long>> checkTable = currRecord.getTransactionTable();
-                // copy all entries of checkpoint DPT (replace existing entries if any)
+                // Copy all entries of checkpoint DPT (replace existing entries if any)
                 dirtyPageTable.putAll(checkDPT);
-                // txn table:
-                // - skip alr ended entries
-                // - add to table if not present
-                // - update lastLSN to be larger of existing and checkpoint's
-                // - update status if poss to transition from table to checkpoint status
-                // ^ ex: running-> aborting works, aborting-> running does not
-                for (Long key : checkTable.keySet()) {
-                    Transaction.Status checkStat = checkTable.get(key).getFirst();
-                    Long checkLSN = checkTable.get(key).getSecond();
-                    if (!endedTransactions.contains(key)) {
-                        if (!transactionTable.containsKey(key)) {
-                            Transaction trans = newTransaction.apply(key);
-                            startTransaction(trans); // will add to table
-                        }
-                        entry = transactionTable.get(key);
-
-                        if (entry.lastLSN < checkLSN) {
-                            entry.lastLSN = checkLSN;
-                        }
-
-                        // update if checkpoint more advanced
-                        // - running -> committing -> complete, running -> aborting -> complete
-                        // - if the checkpoint says a transaction is aborting and our in-memory table says its running,
-                        // we should update the in-memory status to recovery aborting*
-                        if (entry.transaction.getStatus() == Transaction.Status.RUNNING &&
-                                (checkStat == Transaction.Status.COMMITTING || checkStat == Transaction.Status.COMPLETE)) {
-                            entry.transaction.setStatus(checkStat);
-                        } else if ((entry.transaction.getStatus() == Transaction.Status.COMMITTING || entry.transaction.getStatus() == Transaction.Status.ABORTING)
-                                && checkStat == Transaction.Status.COMPLETE) {
-                            entry.transaction.setStatus(checkStat);
-                        } else if (entry.transaction.getStatus() == Transaction.Status.RUNNING && checkStat == Transaction.Status.ABORTING) {
-                            entry.transaction.setStatus(Transaction.Status.RECOVERY_ABORTING);
+                for (Map.Entry<Long, Pair<Transaction.Status, Long>> checkTransEntry : checkTable.entrySet()) {
+                    long checkTransNum = checkTransEntry.getKey();
+                    Transaction.Status checkTransStatus = checkTransEntry.getValue().getFirst();
+                    long checkLastLSN = checkTransEntry.getValue().getSecond();
+                    if (endedTransactions.contains(checkTransNum)) {
+                        // Skip txn table entries for transactions that have already ended
+                        continue;
+                    }
+                    if (!transactionTable.containsKey(checkTransNum)) {
+                        // Add to transaction table if not already present
+                        Transaction trans = newTransaction.apply(checkTransNum);
+                        startTransaction(trans); // will add to table
+                        // put txn in txnTbl again but with transNum ?
+                        transactionTable.put(checkTransNum, new TransactionTableEntry(trans));
+                    }
+                    TransactionTableEntry tEntry = transactionTable.get(checkTransNum);
+                    if (tEntry.lastLSN < checkLastLSN) {
+                        // Update lastLSN to be the larger of the existing entry's (if any) and
+                        // the checkpoint's
+                        tEntry.lastLSN = checkLastLSN;
+                    }
+                    // The status's in the transaction table should be updated if it is possible
+                    // to transition from the status in the table to the status in th
+                    // checkpoint. For example, running -> aborting is a possible transition,
+                    // but aborting -> running is not.
+                    Transaction tEntryTxn = tEntry.transaction;
+                    // the only valid transitions are from RUNNING -> ABORTING and RUNNING -> COMMITTING
+                    if (tEntryTxn.getStatus() == Transaction.Status.RUNNING) {
+                        if (checkTransStatus == Transaction.Status.ABORTING) {
+                            tEntryTxn.setStatus(Transaction.Status.RECOVERY_ABORTING);
+                        } else if (checkTransStatus == Transaction.Status.COMMITTING) {
+                            tEntryTxn.setStatus(Transaction.Status.COMMITTING);
                         }
                     }
                 }
@@ -706,20 +723,20 @@ public class ARIESRecoveryManager implements RecoveryManager {
         //     *    record
         //     *  - if RECOVERY_ABORTING: no action needed
         // *appendToLog returns LSN of new log record
-        for (Long key : transactionTable.keySet()) {
-            TransactionTableEntry entry = transactionTable.get(key);
+        for (TransactionTableEntry entry : transactionTable.values()) {
             Transaction.Status status = entry.transaction.getStatus();
+            long transNum = entry.transaction.getTransNum();
             if (status == Transaction.Status.COMMITTING) {
                 entry.transaction.cleanup();
                 entry.transaction.setStatus(Transaction.Status.COMPLETE);
-                LogRecord newRecord = new EndTransactionLogRecord(key, entry.lastLSN);
-                transactionTable.remove(key);
+                LogRecord newRecord = new EndTransactionLogRecord(transNum, entry.lastLSN);
+                transactionTable.remove(transNum);
                 entry.lastLSN = logManager.appendToLog(newRecord);
                 // increment LSN?
             } else if (status == Transaction.Status.RUNNING) {
                 entry.transaction.setStatus(Transaction.Status.RECOVERY_ABORTING);
                 // append abort record
-                LogRecord newRecord = new AbortTransactionLogRecord(key, entry.lastLSN);
+                LogRecord newRecord = new AbortTransactionLogRecord(transNum, entry.lastLSN);
                 entry.lastLSN = logManager.appendToLog(newRecord);
             }
         }
