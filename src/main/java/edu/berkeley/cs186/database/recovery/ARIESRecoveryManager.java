@@ -604,8 +604,12 @@ public class ARIESRecoveryManager implements RecoveryManager {
                 // transactionTable.replace(currRecord.getTransNum(), new TransactionTableEntry());
                 transNum = currRecord.getTransNum().get();
                 entry = transactionTable.get(transNum);
-                Transaction trans = newTransaction.apply(transNum);
-                startTransaction(trans); // will add to table
+                if (transactionTable.containsKey(transNum)) {
+                   entry.lastLSN = currRecord.getLSN();
+                } else {
+                    Transaction trans = newTransaction.apply(transNum);
+                    startTransaction(trans); // will add to table
+                }
             }
 
             // If the log record is page-related (getPageNum is present), update the dpt
@@ -626,11 +630,14 @@ public class ARIESRecoveryManager implements RecoveryManager {
 
             // * If the log record is for a change in transaction status:
             if (type == LogType.COMMIT_TRANSACTION) {
+                entry = transactionTable.get(transNum);
                 entry.transaction.setStatus(Transaction.Status.COMMITTING);
             } else if (type == LogType.ABORT_TRANSACTION) {
+                entry = transactionTable.get(transNum);
                 entry.transaction.setStatus(Transaction.Status.RECOVERY_ABORTING);
             } else if (type == LogType.END_TRANSACTION) {
                 // clean up transaction, remove from table, add to endedTransactions
+                entry = transactionTable.get(transNum);
                 entry.transaction.cleanup();
                 entry.transaction.setStatus(Transaction.Status.COMPLETE);
                 transactionTable.remove(transNum);
@@ -653,9 +660,11 @@ public class ARIESRecoveryManager implements RecoveryManager {
                     Transaction.Status checkStat = checkTable.get(key).getFirst();
                     Long checkLSN = checkTable.get(key).getSecond();
                     if (!endedTransactions.contains(key)) {
-                        Transaction trans = newTransaction.apply(key);
-                        startTransaction(trans); // will add to table
-                        entry = transactionTable.get(transNum);
+                        if (!transactionTable.containsKey(key)) {
+                            Transaction trans = newTransaction.apply(key);
+                            startTransaction(trans); // will add to table
+                        }
+                        entry = transactionTable.get(key);
 
                         if (entry.lastLSN < checkLSN) {
                             entry.lastLSN = checkLSN;
