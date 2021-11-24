@@ -608,7 +608,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
                     Transaction trans = newTransaction.apply(transNum);
                     startTransaction(trans); // will add to table
                     // put txn in txnTbl again but with transNum ?
-                    transactionTable.put(transNum, new TransactionTableEntry(trans));
+                    // transactionTable.put(transNum, new TransactionTableEntry(trans));
                     // transEntry.lastLSN = currRecord.getLSN();
                 }
                 TransactionTableEntry transEntry = transactionTable.get(transNum);
@@ -680,7 +680,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
                         Transaction trans = newTransaction.apply(checkTransNum);
                         startTransaction(trans); // will add to table
                         // put txn in txnTbl again but with transNum ?
-                        transactionTable.put(checkTransNum, new TransactionTableEntry(trans));
+                        // transactionTable.put(checkTransNum, new TransactionTableEntry(trans));
                     }
                     TransactionTableEntry tEntry = transactionTable.get(checkTransNum);
                     if (tEntry.lastLSN < checkLastLSN) {
