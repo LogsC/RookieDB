@@ -746,7 +746,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
                 redoLSN = recLSN;
             }
         }
-        // scanning from the starting point
+        // scanning from the starting point (if empty log, return)
         Iterator<LogRecord> redoLogRecordIter = logManager.scanFrom(redoLSN);
         while (redoLogRecordIter.hasNext()) {
             LogRecord nextRedoLR = redoLogRecordIter.next();
@@ -802,7 +802,57 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     void restartUndo() {
         // TODO(proj5): implement
-        return;
+        // create PQ sorted on lastLSN of all aborting transactions
+        PriorityQueue<Long> abortTxnPQ = new PriorityQueue<>(Collections.reverseOrder());
+        // fill in PQ
+        for (TransactionTableEntry abortEntry : transactionTable.values()) {
+            if (abortEntry.transaction.getStatus() == Transaction.Status.RECOVERY_ABORTING) {
+                abortTxnPQ.add(abortEntry.lastLSN);
+            }
+        }
+        // working on the largest LSN in the priority queue until we are done
+        while (!abortTxnPQ.isEmpty()) {
+            // obtain next record to undo
+            long lastLSN = abortTxnPQ.poll();
+            LogRecord lastLSNRecord = logManager.fetchLogRecord(lastLSN);
+            // if record is undoable, undo it, and append the appropriate CLR
+            if (lastLSNRecord.isUndoable()) {
+                // undo it
+                TransactionTableEntry tEntry = transactionTable.get(lastLSNRecord.getTransNum().get());
+                LogRecord clr = lastLSNRecord.undo(tEntry.lastLSN);
+                // append the appropriate CLR
+                long clrLSN = logManager.appendToLog(clr);
+                tEntry.lastLSN = clrLSN;
+                clr.redo(this, diskSpaceManager, bufferManager);
+            }
+            // replace the entry with a new one, using the undoNextLSN if available,
+            // if the prevLSN otherwise.
+            long newLSN;
+            if (lastLSNRecord.getUndoNextLSN().isPresent()) {
+                // replace entry with undoNextLSN (available)
+                newLSN = lastLSNRecord.getUndoNextLSN().get();
+            } else {
+                // replace entry with prevLSN otherwise
+                newLSN = lastLSNRecord.getPrevLSN().get();
+            }
+            // if the new LSN is 0, clean up the transaction, set the status to complete,
+            // and remove from transaction table.
+            if (newLSN == 0) {
+                TransactionTableEntry tEntry = transactionTable.get(lastLSNRecord.getTransNum().get());
+                Transaction txn = tEntry.transaction;
+                // clean up transaction
+                txn.cleanup();
+                // set status to complete
+                txn.setStatus(Transaction.Status.COMPLETE);
+                // log tNum, lastLSN
+                logManager.appendToLog(new EndTransactionLogRecord(txn.getTransNum(), tEntry.lastLSN));
+                // remove from txn tbl
+                transactionTable.remove(txn.getTransNum());
+            } else {
+                // if newLSN != 0, add newLSN back into the PQ
+                abortTxnPQ.add(newLSN);
+            }
+        }
     }
 
     /**
