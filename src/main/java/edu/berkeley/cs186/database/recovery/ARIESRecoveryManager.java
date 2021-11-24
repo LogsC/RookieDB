@@ -606,7 +606,52 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     void restartRedo() {
         // TODO(proj5): implement
-        return;
+        // determine the starting point for REDO from the dirty page table
+        long redoLSN = Integer.MAX_VALUE;
+        for (long recLSN : dirtyPageTable.values()) {
+            if (recLSN < redoLSN) {
+                redoLSN = recLSN;
+            }
+        }
+        // scanning from the starting point
+        Iterator<LogRecord> redoLogRecordIter = logManager.scanFrom(redoLSN);
+        while (redoLogRecordIter.hasNext()) {
+            LogRecord nextRedoLR = redoLogRecordIter.next();
+            LogType redoLRType = nextRedoLR.getType();
+            // if the record is redoable
+            if (nextRedoLR.isRedoable()) {
+                if (redoLRType == LogType.ALLOC_PART || redoLRType == LogType.FREE_PART ||
+                        redoLRType == LogType.UNDO_ALLOC_PART || redoLRType == LogType.UNDO_FREE_PART) {
+                    // if partition-related (Alloc/Free/UndoAlloc/UndoFree..Part), always redo it
+                    nextRedoLR.redo(this, diskSpaceManager, bufferManager);
+                } else if (redoLRType == LogType.ALLOC_PAGE || redoLRType == LogType.UNDO_FREE_PAGE) {
+                    // if allocates a page (AllocPage/UndoFreePage), always redo it
+                    nextRedoLR.redo(this, diskSpaceManager, bufferManager);
+                } else if (redoLRType == LogType.UPDATE_PAGE || redoLRType == LogType.UNDO_UPDATE_PAGE ||
+                        redoLRType == LogType.FREE_PAGE || redoLRType == LogType.UNDO_ALLOC_PAGE) {
+                    // modifies a page (Update/UndoUpdate/Free/UndoAlloc....Page) in
+                    // the dirty page table with LSN >= recLSN, the page is fetched from disk,
+                    // the pageLSN is checked, and the record is redone if needed.
+                    // ensure DPT has relevant record
+                    if (dirtyPageTable.containsKey(nextRedoLR.getPageNum().get())) {
+                        // get DPT LSN, recLSN, pageLSN
+                        long recLSN = dirtyPageTable.get(nextRedoLR.getPageNum().get());
+                        long LSN = nextRedoLR.getLSN();
+                        // if LSN >= recLSN
+                        if (LSN >= recLSN) {
+                            // fetch page from disk
+                            Page modPage = bufferManager.fetchPage(new DummyLockContext(), nextRedoLR.getPageNum().get());
+                            // check pageLSN
+                            long pageLSN = modPage.getPageLSN();
+                            if (pageLSN < LSN) {
+                                nextRedoLR.redo(this, diskSpaceManager, bufferManager);
+                            }
+                            modPage.unpin();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
