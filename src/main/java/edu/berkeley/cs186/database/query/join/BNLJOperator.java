@@ -2,6 +2,7 @@ package edu.berkeley.cs186.database.query.join;
 
 import edu.berkeley.cs186.database.TransactionContext;
 import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
+import edu.berkeley.cs186.database.databox.DataBox;
 import edu.berkeley.cs186.database.query.JoinOperator;
 import edu.berkeley.cs186.database.query.QueryOperator;
 import edu.berkeley.cs186.database.table.Record;
@@ -87,6 +88,19 @@ public class BNLJOperator extends JoinOperator {
          */
         private void fetchNextLeftBlock() {
             // TODO(proj3_part1): implement
+            // if there are no more records in left source, exit
+            if (this.leftSourceIterator.hasNext()) {
+                // B - 2 pages
+                int pages = numBuffers - 2;
+                // set leftBlockIterator to a backtracking iterator of up
+                // to B-2 pages from left source
+                this.leftBlockIterator = QueryOperator.getBlockIterator(
+                        leftSourceIterator, getLeftSource().getSchema(), pages);
+                if (leftBlockIterator.hasNext()) {
+                    this.leftBlockIterator.markNext();
+                    this.leftRecord = leftBlockIterator.next();
+                }
+            }
         }
 
         /**
@@ -101,6 +115,16 @@ public class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRightPage() {
             // TODO(proj3_part1): implement
+            // if there are no more records in the right source, move on
+            if (this.rightSourceIterator.hasNext()) {
+                // set rightPageIterator to a backtracking block iterator for up
+                // to 1 page of records from the right source
+                this.rightPageIterator = QueryOperator.getBlockIterator(
+                        rightSourceIterator, getRightSource().getSchema(), 1);
+                if (rightPageIterator.hasNext()) {
+                    this.rightPageIterator.markNext();
+                }
+            }
         }
 
         /**
@@ -113,7 +137,48 @@ public class BNLJOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
-            return null;
+            if (leftRecord == null) {
+                // The left source was empty, nothing to fetch
+                return null;
+            }
+            while(true) {
+                if (this.rightPageIterator.hasNext()) {
+                    // if the right page iterator has a value to yield:
+                    // Join if match
+                    Record rightRecord = rightPageIterator.next();
+                    if (compare(leftRecord, rightRecord) == 0) {
+                        return leftRecord.concat(rightRecord);
+                    }
+                } else if (this.leftBlockIterator.hasNext()){
+                    // if the right page iterator doesn't have a value to yield
+                    // but the left block iterator does:
+                    // Advance left and reset right
+                    this.leftRecord = leftBlockIterator.next();
+                    this.rightPageIterator.reset();
+                    // this.rightPageIterator.markNext();
+                } else if (this.rightSourceIterator.hasNext()) {
+                    // if neither the right page nor left block iterators have values
+                    // to yield, but there's more right pages:
+                    // fetch next right page
+                    fetchNextRightPage();
+                    this.leftBlockIterator.reset();
+                    // this.leftBlockIterator.markNext();
+                    leftRecord = leftBlockIterator.next();
+                } else if (this.leftSourceIterator.hasNext()) {
+                    // if neither right page nor left block iterators have values
+                    // nor are there more right pages, but there are still left blocks
+                    // move rightPageIterator to next page (?)
+                    // fetch next left block
+                    fetchNextLeftBlock();
+                    this.rightSourceIterator.reset();
+                    // this.rightSourceIterator.markNext();
+                    fetchNextRightPage();
+                    // fetch next right page, start from the beginning
+                } else {
+                    // if you're here then there are no more records to fetch
+                    return null;
+                }
+            }
         }
 
         /**
