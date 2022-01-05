@@ -26,6 +26,7 @@ import edu.berkeley.cs186.database.recovery.ARIESRecoveryManager;
 import edu.berkeley.cs186.database.recovery.DummyRecoveryManager;
 import edu.berkeley.cs186.database.recovery.RecoveryManager;
 import edu.berkeley.cs186.database.table.*;
+import edu.berkeley.cs186.database.table.Record;
 import edu.berkeley.cs186.database.table.stats.TableStats;
 
 import java.io.*;
@@ -1315,6 +1316,7 @@ public class Database implements AutoCloseable {
 
             // refresh histograms so that query cost estimation works
             tb.buildStatistics(10);
+
             return false;
     }
 }

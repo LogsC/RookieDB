@@ -1,5 +1,6 @@
 package edu.berkeley.cs186.database.concurrency;
 
+
 import edu.berkeley.cs186.database.Transaction;
 import edu.berkeley.cs186.database.TransactionContext;
 
@@ -60,6 +61,7 @@ public class LockManager {
          */
         public boolean checkCompatible(LockType lockType, long except) {
             // TODO(proj4_part1): implement
+
             for (Lock lock : locks) {
                 // checking if conflict (compatible)
                 if (!LockType.compatible(lock.lockType, lockType)) {

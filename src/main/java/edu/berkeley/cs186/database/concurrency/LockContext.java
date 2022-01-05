@@ -1,6 +1,8 @@
 package edu.berkeley.cs186.database.concurrency;
 
+
 import edu.berkeley.cs186.database.DatabaseException;
+
 import edu.berkeley.cs186.database.TransactionContext;
 
 import java.util.ArrayList;
@@ -97,6 +99,7 @@ public class LockContext {
     public void acquire(TransactionContext transaction, LockType lockType)
             throws InvalidLockException, DuplicateLockRequestException {
         // TODO(proj4_part2): implement
+
         if (this.readonly) {
             throw new UnsupportedOperationException("Error: This Lock Context is readonly!");
         }
@@ -131,6 +134,7 @@ public class LockContext {
     public void release(TransactionContext transaction)
             throws NoLockHeldException, InvalidLockException {
         // TODO(proj4_part2): implement
+
         if (readonly) {
             throw new UnsupportedOperationException("Error: This Lock Context is readonly!");
         }

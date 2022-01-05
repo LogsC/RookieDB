@@ -140,7 +140,72 @@ public class SortMergeOperator extends JoinOperator {
          */
         private Record fetchNextRecord() {
             // TODO(proj3_part1): implement
-            return null;
+            while (true) {
+                if (leftRecord == null) {
+                    // left empty = no records to fetch
+                    return null;
+                }
+                // if unmarked, compare records, then mark
+                if (!marked) {
+                    // while leftRecord < rightRecord, move leftRecord up
+                    while (compare(leftRecord, rightRecord) < 0) {
+                        // while left record join value is less than right record,
+                        // move leftRecord next until return
+                        if (!leftIterator.hasNext()) {
+                            // no more records to fetch
+                            return null;
+                        }
+                        leftRecord = leftIterator.next();
+                    }
+                    // while rightRecord < leftRecord, move rightRecord up
+                    while (compare(rightRecord, leftRecord) < 0) {
+                        if (!rightIterator.hasNext()) {
+                            // no more records to fetch
+                            return null;
+                        }
+                        rightRecord = rightIterator.next();
+                    }
+                    // mark result
+                    marked = true;
+                    rightIterator.markPrev();
+                }
+                // marked
+                if (rightRecord != null) {
+                    // compare and return if relevant
+                    // else reset right iterator, unmark, move to next left iterator
+                    if (compare(leftRecord, rightRecord) == 0) {
+                        // return next record
+                        Record nextRecord = leftRecord.concat(rightRecord);
+                        // update rightRecord to next (if exists)
+                        if (rightIterator.hasNext()) {
+                            rightRecord = rightIterator.next();
+                        } else {
+                            rightRecord = null;
+                        }
+                        return nextRecord;
+                    } else {
+                        // record join values are not equal
+                        // reset right iterator, set next, unmark, update left
+                        rightIterator.reset();
+                        rightRecord = rightIterator.next();
+                        marked = false;
+                        if (leftIterator.hasNext()) {
+                            leftRecord = leftIterator.next();
+                        } else {
+                            leftRecord = null;
+                        }
+                    }
+                } else if (leftIterator.hasNext()) {
+                    // reset right iterator, unmark, move to next left iterator
+                    rightIterator.reset();
+                    rightRecord = rightIterator.next();
+                    marked = false;
+                    leftRecord = leftIterator.next();
+                } else {
+                    // left empty = no more records to fetch
+                    return null;
+                }
+            }
         }
 
         @Override

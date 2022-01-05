@@ -39,7 +39,7 @@ public class TestBasicQuery {
     // 1 second max per method tested.
     @Rule
     public TestRule globalTimeout = new DisableOnDebug(Timeout.millis((long) (
-                1000 * TimeoutScaling.factor)));
+                1000 * TimeoutScaling.factor * 10)));
 
     @Before
     public void beforeEach() throws Exception {
