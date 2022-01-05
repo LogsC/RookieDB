@@ -107,9 +107,12 @@ public class Database implements AutoCloseable {
     // Statistics about the contents of the database.
     private Map<String, TableStats> stats = new ConcurrentHashMap<>();
 
+<<<<<<< HEAD
     // Names of tables loaded for demo
     private ArrayList<String> demoTables = new ArrayList<>();
 
+=======
+>>>>>>> 6b111067021bc09ee630311adbad4d79df7853cd
     /**
      * Creates a new database with:
      * - Default buffer size
@@ -288,8 +291,11 @@ public class Database implements AutoCloseable {
         // wait for all transactions to terminate
         this.waitAllTransactions();
 
+<<<<<<< HEAD
         dropDemoTables();
 
+=======
+>>>>>>> 6b111067021bc09ee630311adbad4d79df7853cd
         this.bufferManager.evictAll();
 
         this.recoveryManager.close();
@@ -1231,6 +1237,7 @@ public class Database implements AutoCloseable {
         }
     }
 
+<<<<<<< HEAD
     public void dropDemoTables() {
         for (String table: demoTables) {
             try(Transaction t = beginTransaction()) {
@@ -1250,6 +1257,12 @@ public class Database implements AutoCloseable {
             loadCSV(table);
         }
 
+=======
+    public void loadDemo() throws IOException {
+        loadCSV("Students");
+        loadCSV("Courses");
+        loadCSV("Enrollments");
+>>>>>>> 6b111067021bc09ee630311adbad4d79df7853cd
         waitAllTransactions();
         getBufferManager().evictAll();
     }
@@ -1285,13 +1298,17 @@ public class Database implements AutoCloseable {
                 rows.add(new Record(parsed));
                 row = buffered.readLine();
             }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 6b111067021bc09ee630311adbad4d79df7853cd
             try(Transaction t = beginTransaction()) {
                 t.createTable(schema, name);
             } catch (DatabaseException e) {
                 if (e.getMessage().contains("already exists")) return true;
                 throw e;
             }
+<<<<<<< HEAD
 
             // store table stats before inserting rows
             Pair<RecordId, TableMetadata> pair = this.getTableMetadata(name);
@@ -1300,14 +1317,19 @@ public class Database implements AutoCloseable {
             }
             Table tb = tableFromMetadata(pair.getSecond());
 
+=======
+>>>>>>> 6b111067021bc09ee630311adbad4d79df7853cd
             try (Transaction t = beginTransaction()) {
                 for (Record r : rows) {
                     t.insert(name, r);
                 }
             }
+<<<<<<< HEAD
 
             // refresh histograms so that query cost estimation works
             tb.buildStatistics(10);
+=======
+>>>>>>> 6b111067021bc09ee630311adbad4d79df7853cd
             return false;
     }
 }
